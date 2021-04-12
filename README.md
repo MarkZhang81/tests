@@ -9,4 +9,3 @@ Usage:
     $ ./u 0 1
     $ (ssh -X <server>)
     $ gnuplot -p hashout.gnuplot
-```
