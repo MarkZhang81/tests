@@ -9,3 +9,6 @@ Usage:
     $ ./u 0 1
     $ (ssh -X <server>)
     $ gnuplot -p hashout.gnuplot
+
+** sigtest
+A simple tool for mlx5 signature offload test.

@@ -1,0 +1,16 @@
+CC := gcc
+LD := gcc
+CFLAGS := -Wall -g
+
+LIBS := -lrdmacm -libverbs -lmlx5
+
+all: sigtest
+
+sigtest: main.o sig_test.o
+	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
+
+%.o: %.c
+	$(CC) $(CFLAGS) -c $^
+
+clean:
+	rm -f *.o sigtest
