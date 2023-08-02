@@ -12,3 +12,6 @@ Usage:
 
 ** sigtest
 A simple tool for mlx5 signature offload test.
+
+** create_obj_perf_test
+A simple tool to test the performance of creating rdma objects (pd, mr, cq and qp). It supports multi-thread tests.
