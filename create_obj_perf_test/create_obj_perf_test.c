@@ -24,15 +24,16 @@ struct perf_inst {
 	struct ibv_cq *cq;
 	struct ibv_qp *qp;
 
-	uint64_t tm_pd, tm_mr, tm_cq, tm_qp;
+	uint64_t tm_pd, tm_mr, tm_cq, tm_qp, tm_mqp, tm_dqp, tm_dcq, tm_dmr, tm_dpd;
 };
 
 struct perf_task {
 	pthread_t tid;
 	struct ibv_context *ibctx;
 	struct perf_inst *insts;
+	sem_t sem_destroy_start;
 
-	uint64_t create_tm_used;
+	uint64_t create_tm_used, destroy_tm_used;
 };
 
 static struct perf_task *tasks;
@@ -43,9 +44,9 @@ static struct ibv_device *ibdev;
 
 uint64_t prog_create_tm_used;
 
-struct timeval tv_prog_start, tv_prog_done;
-static int num_task_create_done;
-sem_t sem;
+struct timeval tv_prog_create_start, tv_prog_create_done, tv_prog_destroy_start, tv_prog_destroy_done;
+static int num_task_create_done, num_task_destroy_done;
+sem_t sem_create_done, sem_destroy_done;
 
 static void show_usage(char *prog)
 {
@@ -133,16 +134,24 @@ static char buf[1024];
 static void *task_run(void *arg)
 {
 	struct perf_task *task = (struct perf_task *)arg;
-	struct timeval tt0, tt1, t0, t1, t2, t3, t4;
+	struct timeval tt0, tt1, dtt0, dtt1, t0, t1, t2, t3, t4, t5;
 	struct perf_inst *inst;
 	struct ibv_qp_init_attr qp_init_attr = {};
-	int i;
+	struct ibv_qp_attr attr = {
+		.qp_state = IBV_QPS_INIT,
+		.pkey_index = 0,
+		.port_num = 1,
+		.qp_access_flags = IBV_ACCESS_LOCAL_WRITE | IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_REMOTE_READ,
+	};
+	int i, ret;
 
 	task->ibctx = ibv_open_device(ibdev);
 	if (!task->ibctx) {
 		err("ibv_open_device failed %d, task abort\n", errno);
 		return NULL;
 	}
+
+	sem_init(&task->sem_destroy_start, 0, 0);
 
 	gettimeofday(&tt0, NULL);
 	for (i = 0; i < inst_num_per_task; i++) {
@@ -183,24 +192,80 @@ static void *task_run(void *arg)
 		inst->qp = ibv_create_qp(inst->pd, &qp_init_attr);
 		if (!inst->qp) {
 			perror("ibv_create_qp failed, abort\n");
+			goto fail;
 		}
 
 		gettimeofday(&t4, NULL);
+		ret = ibv_modify_qp(inst->qp, &attr,
+				    IBV_QP_STATE | IBV_QP_PKEY_INDEX | IBV_QP_PORT | IBV_QP_ACCESS_FLAGS);
+		if (ret) {
+			perror("ibv_modify_qp, abort\n");
+			goto fail;
+		}
+		gettimeofday(&t5, NULL);
 
 		inst->tm_pd = get_time_used(&t0, &t1);
 		inst->tm_mr = get_time_used(&t1, &t2);
 		inst->tm_cq = get_time_used(&t2, &t3);
 		inst->tm_qp = get_time_used(&t3, &t4);
+		inst->tm_mqp = get_time_used(&t4, &t5);
 	}
 
 	gettimeofday(&tt1, NULL);
 	task->create_tm_used = get_time_used(&tt0, &tt1);
 
 	num_task_create_done++;
-	if (num_task_create_done >= task_num) {
-		gettimeofday(&tv_prog_done, NULL);
-		sem_post(&sem);
+	if (num_task_create_done >= task_num)
+		sem_post(&sem_create_done);
+
+	sem_wait(&task->sem_destroy_start);
+
+	gettimeofday(&dtt0, NULL);
+	for (i = 0; i < inst_num_per_task; i++) {
+		inst = &task->insts[i];
+
+		gettimeofday(&t0, NULL);
+		ret = ibv_destroy_qp(inst->qp);
+		if (ret) {
+			perror("ibv_destroy_qp, abort");
+			goto fail;
+		}
+
+		gettimeofday(&t1, NULL);
+		ret = ibv_destroy_cq(inst->cq);
+		if (ret) {
+			perror("ibv_destroy_cq, abort");
+			goto fail;
+		}
+
+		gettimeofday(&t2, NULL);
+		ret = ibv_dereg_mr(inst->mr);
+		if (ret) {
+			perror("ibv_dereg_mr, abort");
+			goto fail;
+		}
+
+		gettimeofday(&t3, NULL);
+		ret = ibv_dealloc_pd(inst->pd);
+		if (ret) {
+			perror("ibv_dealloc_pd, abort");
+			goto fail;
+		}
+
+		gettimeofday(&t4, NULL);
+
+		inst->tm_dqp = get_time_used(&t0, &t1);
+		inst->tm_dcq = get_time_used(&t1, &t2);
+		inst->tm_dmr = get_time_used(&t2, &t3);
+		inst->tm_dpd = get_time_used(&t3, &t4);
 	}
+
+	gettimeofday(&dtt1, NULL);
+	task->destroy_tm_used = get_time_used(&dtt0, &dtt1);
+
+	num_task_destroy_done++;
+	if (num_task_destroy_done >= task_num)
+		sem_post(&sem_destroy_done);
 
 	return NULL;
 
@@ -218,8 +283,6 @@ static int start_tasks(void)
 		err("Calloc(%d, %ld) failed: %d\n", task_num, sizeof(*tasks), errno);
 		exit(errno);
 	}
-
-	gettimeofday(&tv_prog_start, NULL);
 
 	for (i = 0; i < task_num; i++) {
 		tasks[i].insts = calloc(inst_num_per_task, sizeof(*tasks[i].insts));
@@ -242,8 +305,8 @@ static int start_tasks(void)
 static void do_statistic_instance(void)
 {
 	struct perf_inst *inst;
-	uint64_t tpd = 0, tmr = 0, tcq = 0, tqp = 0;
-	uint64_t mpd = 0, mmr = 0, mcq = 0, mqp = 0;
+	uint64_t tpd = 0, tmr = 0, tcq = 0, tqp = 0, tmqp = 0, tdqp = 0, tdcq = 0, tdmr = 0, tdpd = 0;
+	uint64_t mpd = 0, mmr = 0, mcq = 0, mqp = 0, mmqp = 0, mdqp = 0, mdcq = 0, mdmr = 0, mdpd = 0;
 	int i, j;
 
 	for (i = 0; i < task_num; i++) {
@@ -253,19 +316,34 @@ static void do_statistic_instance(void)
 			tmr += inst->tm_mr;
 			tcq += inst->tm_cq;
 			tqp += inst->tm_qp;
-
+			tmqp += inst->tm_mqp;
 			if (inst->tm_pd > mpd)
 				mpd = inst->tm_pd;
-			if (inst->tm_mr)
+			if (inst->tm_mr > mmr)
 				mmr = inst->tm_mr;
-			if (inst->tm_cq)
+			if (inst->tm_cq > mcq)
 				mcq = inst->tm_cq;
-			if (inst->tm_qp)
+			if (inst->tm_qp > mqp)
 				mqp = inst->tm_qp;
+			if (inst->tm_mqp > mmqp)
+				mmqp = inst->tm_mqp;
+
+			tdqp += inst->tm_dqp;
+			tdcq += inst->tm_dcq;
+			tdmr += inst->tm_dmr;
+			tdpd += inst->tm_dpd;
+			if (inst->tm_dqp > mdqp)
+				mdqp = inst->tm_dqp;
+			if (inst->tm_dcq > mdcq)
+				mdcq = inst->tm_dcq;
+			if (inst->tm_dmr > mdmr)
+				mdmr = inst->tm_dmr;
+			if (inst->tm_dpd > mdpd)
+				mdpd = inst->tm_dpd;
 		}
 	}
 
-	dump("Maximum and average time used for each step(in mini-seconds):\n");
+	dump("Maximum and average time used for each step (in mini-seconds):\n");
 	tpd /= (task_num * inst_num_per_task);
 	dump("  alloc_pd:  %03ld.%03ld	%03ld.%03ld\n", mpd / 1000, mpd % 1000, tpd / 1000, tpd % 1000);
 	tmr /= (task_num * inst_num_per_task);
@@ -274,22 +352,41 @@ static void do_statistic_instance(void)
 	dump("  create_cq: %03ld.%03ld	%03ld.%03ld\n", mcq / 1000, mcq % 1000, tcq / 1000, tcq % 1000);
 	tqp /= (task_num * inst_num_per_task);
 	dump("  create_qp: %03ld.%03ld	%03ld.%03ld\n", mqp / 1000, mqp % 1000, tqp / 1000, tqp % 1000);
+	tmqp /= (task_num * inst_num_per_task);
+	dump("  modify_qp: %03ld.%03ld	%03ld.%03ld\n", mmqp / 1000, mmqp % 1000, tmqp / 1000, tmqp % 1000);
+
+	dump("\n");
+	tdqp /= (task_num * inst_num_per_task);
+	dump("  destroy_qp: %03ld.%03ld	%03ld.%03ld\n", mdqp / 1000, mdqp % 1000, tdqp / 1000, tdqp % 1000);
+	tdcq /= (task_num * inst_num_per_task);
+	dump("  destroy_cq: %03ld.%03ld	%03ld.%03ld\n", mdcq / 1000, mdcq % 1000, tdcq / 1000, tdcq % 1000);
+	tdmr /= (task_num * inst_num_per_task);
+	dump("  dereg_mr:   %03ld.%03ld	%03ld.%03ld\n", mdmr / 1000, mdmr % 1000, tdmr / 1000, tdmr % 1000);
+	tdpd /= (task_num * inst_num_per_task);
+	dump("  dealloc_pd: %03ld.%03ld	%03ld.%03ld\n", mdpd / 1000, mdpd % 1000, tdpd / 1000, tdpd % 1000);
 }
 
 static void do_statistic_task(void)
 {
-	uint64_t total = 0, max = 0;
+	uint64_t total = 0, dtotal = 0, max = 0, dmax = 0;
 	int i;
 
 	for (i = 0; i < task_num; i++) {
 		total += tasks[i].create_tm_used;
 		if (tasks[i].create_tm_used > max)
 			max = tasks[i].create_tm_used;
+
+		dtotal += tasks[i].destroy_tm_used;
+		if (tasks[i].destroy_tm_used > dmax)
+			dmax = tasks[i].destroy_tm_used;
 	}
 
-	dump("\nMaximum and average time used for each task(in mini-seconds):\n");
+	dump("\nMaximum and average time used for each task (in mini-seconds):\n");
 	total /= task_num;
-	dump("  %03ld.%03ld  %03ld.%03ld\n", max / 1000, max % 1000, total / 1000, total % 1000);
+	dump("  Create:  %03ld.%03ld  %03ld.%03ld\n", max / 1000, max % 1000, total / 1000, total % 1000);
+
+	dtotal /= task_num;
+	dump("  Destroy: %03ld.%03ld  %03ld.%03ld\n", dmax / 1000, dmax % 1000, dtotal / 1000, dtotal % 1000);
 
 }
 
@@ -303,23 +400,19 @@ static void do_statistic(void)
 	do_statistic_instance();
 	do_statistic_task();
 
-	tm_used = get_time_used(&tv_prog_start, &tv_prog_done);
-	dump("\nProgram wise: %ld.%03ld seconds\n\n", tm_used / 1000000, (tm_used % 1000000)/ 1000);
+	tm_used = get_time_used(&tv_prog_create_start, &tv_prog_create_done);
+	dump("\nProgram wise:\n");
+	dump("  Create:  %ld.%03ld seconds\n", tm_used / 1000000, (tm_used % 1000000)/ 1000);
+
+	tm_used = get_time_used(&tv_prog_destroy_start, &tv_prog_destroy_done);
+	dump("  Destroy: %ld.%03ld seconds\n", tm_used / 1000000, (tm_used % 1000000)/ 1000);
 }
 
 static void cleanup(void)
 {
-	struct perf_inst *inst;
-	int i, j;
+	int i;
 
 	for (i = 0; i < task_num; i++) {
-		for (j = 0; j < inst_num_per_task; j++) {
-			inst = &tasks[i].insts[j];
-			ibv_destroy_qp(inst->qp);
-			ibv_destroy_cq(inst->cq);
-			ibv_dereg_mr(inst->mr);
-			ibv_dealloc_pd(inst->pd);
-		}
 		free(tasks[i].insts);
 		ibv_close_device(tasks[i].ibctx);
 	}
@@ -330,22 +423,35 @@ static void cleanup(void)
 
 int main(int argc, char *argv[])
 {
-	int ret;
+	int i, ret;
 
 	ret = parse_opt(argc, argv);
 	if (ret)
 		return ret;
 
-	sem_init(&sem, 0, 0);
+	sem_init(&sem_create_done, 0, 0);
+	sem_init(&sem_destroy_done, 0, 0);
+
+	gettimeofday(&tv_prog_create_start, NULL);
 	ret = start_tasks();
 	if (ret)
 		return ret;
 
-	sem_wait(&sem);
-	info("All tasks done\n");
+	sem_wait(&sem_create_done);
+	gettimeofday(&tv_prog_create_done, NULL);
+	info("All tasks create resources done\n");
+
+	gettimeofday(&tv_prog_destroy_start, NULL);
+	for (i = 0; i < task_num; i++)
+		sem_post(&tasks[i].sem_destroy_start);
+
+	sem_wait(&sem_destroy_done);
+	gettimeofday(&tv_prog_destroy_done, NULL);
+	info("All tasks destroy resources done\n");
+
 	do_statistic();
 
-	info("Test done, now cleanup...\n\n");
 	cleanup();
+	dump("\n");
 	return 0;
 }
