@@ -360,13 +360,14 @@ static int run_client(void)
 static void show_usage(char *program)
 {
 	printf("Usage: %s [OPTION]\n", program);
-	printf("  [-c, --client]       - Run as the client\n");
+	printf("  [-c, --client] <server_ip>      - Run as the client (must be the last parameter)\n");
 	printf("  [-s, --server]       - Run as the server\n");
+	printf("  [-n, --block-num]    - Number of blocks (1 by default), must be same in server and client side\n");
 	printf("  [-m, --enable-check-copy-en-mask]       - Enable the check-copy-en-mask flag\n");
 	printf("  [-h, --help]         - Show help\n");
 	printf("Example:\n");
-	printf("  Server: %s -s\n", program);
-	printf("  Client: %s -c <server_ip>\n", program);
+	printf("  Server: %s -n 2 -s\n", program);
+	printf("  Client: %s -n 2 -c 192.168.0.64\n", program);
 }
 
 static int get_addr(char *ip, struct sockaddr *addr)
@@ -399,12 +400,13 @@ static int parse_opt(int argc, char *argv[])
 		{"help", 0, NULL, 'h'},
 		{"client", 0, NULL, 'c'},
 		{"server", 0, NULL, 's'},
+		{"block-num", 0, NULL, 'n'},
 		{"enable-check-copy-en-mask", 0, NULL, 'm'},
 		{},
 	};
 	int op, err;
 
-	while ((op = getopt_long(argc, argv, "hvcsm", long_opts, NULL)) != -1) {
+	while ((op = getopt_long(argc, argv, "hvcsn:m", long_opts, NULL)) != -1) {
                 switch (op) {
 		case 'v':
 			//printf("%s %s\n", PROJECT_NAME, PROJECT_VERSION);
@@ -434,6 +436,10 @@ static int parse_opt(int argc, char *argv[])
 		case 'm':
 			param.check_copy_en_mask = true;
 			info("check_copy_en_mask flag is enabled\n");
+			break;
+
+		case 'n':
+			param.block_num = atoi(optarg);
 			break;
 
 		default:

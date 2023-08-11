@@ -17,7 +17,7 @@ enum {
 
 static unsigned int sig_block_size = 512;
 static unsigned int sig_pi_size = 8;	/* For t10dif */
-static unsigned int sig_num_blocks = 2;
+static unsigned int sig_num_blocks = 1;
 
 static struct ibv_mr *data_mr, *pi_mr;
 static unsigned char *data_buf, *pi_buf;
@@ -196,8 +196,8 @@ static int config_sig_mkey(struct ibv_qp *qp, struct mlx5dv_mkey *mkey,
 		sge.addr = (uint64_t)data_mr->addr;
 		sge.lkey = data_mr->lkey;
 		//sge.length = data_mr->length;
-		//sge.length = sig_block_size * sig_num_blocks;
-		sge.length = sig_block_size * 2;
+		sge.length = sig_block_size * sig_num_blocks;
+		//sge.length = sig_block_size * 2;
 		mlx5dv_wr_set_mkey_layout_list(dv_qp, 1, &sge);
 	}
 
@@ -406,6 +406,15 @@ static void init_buf(unsigned char *buf, ssize_t len, unsigned char c)
 		buf[i] = c;
 }
 
+static void init_send_buf(unsigned char *buf, unsigned int block_size,
+			  unsigned int block_num, unsigned char c)
+{
+	int i;
+
+	for (i = 0; i < block_num; i++)
+		init_buf(buf + i * block_size, block_size, c++);
+}
+
 static int check_sig_mkey(struct mlx5dv_mkey *mkey)
 {
 	struct mlx5dv_mkey_err err_info;
@@ -450,6 +459,9 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 {
 	ssize_t recv_len = (sig_block_size + sig_pi_size) * sig_num_blocks;
 	int ret;
+
+	if (param->block_num)
+		sig_num_blocks = param->block_num;
 
 	ret = create_sig_res(pd);
 	if (ret)
@@ -541,11 +553,14 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (ret)
 		return ret;
 
+	if (param->block_num)
+		sig_num_blocks = param->block_num;
+
 	ret = create_sig_res(pd);
 	if (ret)
 		return ret;
 
-	init_buf(data_buf, send_len, 0xfe);
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x5a);
 
 	usleep(1000*500);
 	info("Send data (%ld bytes) without mkey...\n", send_len);
@@ -554,14 +569,14 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 		goto out;
 	info ("Done\n\n");
 
-	init_buf(data_buf, send_len, 0xff);
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0xc0);
 	info("Register sig mkey (WIRE)...\n");
 	ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
 	if (ret)
 		goto out;
 	info("Done\n\n");
 
-	usleep(1000*500);
+	usleep(1000 * 500);
 	info("Send data (%ld bytes) with mkey (server receives without mkey)...\n", send_len);
 	ret = do_send(qp, cq, send_len, sig_mkey);
 	if (ret)
@@ -577,7 +592,7 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (ret < 0)
 		goto out;
 
-	usleep(1000*500);
+	usleep(1000 * 500);
 	info("Send data (%ld bytes) with mkey (server receives *with* mkey)...\n", send_len);
 	ret = do_send(qp, cq, send_len, sig_mkey);
 	if (ret)

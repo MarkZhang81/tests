@@ -8,6 +8,7 @@
 #define dbg(args...) fprintf(stdout, ##args)
 
 struct sig_param {
+	unsigned int block_num;
 	bool check_copy_en_mask;
 };
 
