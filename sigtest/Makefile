@@ -9,8 +9,8 @@ all: sigtest
 sigtest: main.o sig_test.o
 	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $^
+%.o: %.c sig_test.h
+	$(CC) $(CFLAGS) -c $<
 
 clean:
 	rm -f *.o sigtest
