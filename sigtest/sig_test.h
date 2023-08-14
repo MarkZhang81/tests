@@ -8,8 +8,14 @@
 #define dbg(args...) fprintf(stdout, ##args)
 
 struct sig_param {
-	unsigned int block_num;
+	enum mlx5dv_sig_type sig_type;
+
 	bool check_copy_en_mask;
+	unsigned int block_num;
+	unsigned int block_size;
+	unsigned int pi_size;
+
+//	int sts;		/* Storage tag size */
 };
 
 static inline const char *wc_opcode_str(enum ibv_wc_opcode opcode)

@@ -158,6 +158,26 @@ static void set_sig_domain_t10dif(struct mlx5dv_sig_block_domain *domain,
 		MLX5DV_BLOCK_SIZE_512 : MLX5DV_BLOCK_SIZE_4096;
 }
 
+static void set_sig_domain_nvmedif(struct mlx5dv_sig_block_domain *domain,
+				   struct mlx5dv_sig_nvmedif *dif)
+{
+	domain->sig_type = MLX5DV_SIG_TYPE_NVMEDIF;
+	domain->sig.nvmedif = dif;
+	domain->block_size = (sig_block_size == 512) ?
+		MLX5DV_BLOCK_SIZE_512 : MLX5DV_BLOCK_SIZE_4096;
+
+	dif->format = MLX5DV_SIG_NVMEDIF_FORMAT_32;
+	dif->seed = UINT32_MAX;
+	dif->storage_tag = 0x11223344dead5566;
+	dif->ref_tag = 0x55667788beef9900;
+	dif->sts = 20;
+
+	dif->flags = MLX5DV_SIG_NVMEDIF_FLAG_APP_REF_ESCAPE;
+	dif->app_tag = 0x6a43;
+	dif->app_tag_check = 0xf;
+	dif->storage_tag_check = 0x3f;
+}
+
 static int config_sig_mkey(struct ibv_qp *qp, struct mlx5dv_mkey *mkey,
 			   struct mlx5dv_sig_block_attr *sig_attr, int mode)
 {
@@ -232,6 +252,49 @@ static int reg_sig_mkey_t10dif(struct ibv_qp *qp, struct ibv_cq *cq,
 	if (param && param->check_copy_en_mask) {
 		sig_attr.check_mask = 0;
 		sig_attr.comp_mask = MLX5DV_SIG_BLOCK_COMP_MASK_CHECK_COPY_EN;
+	}
+
+	if (config_sig_mkey(qp, mkey, &sig_attr, mode))
+		return -1;
+
+	info("Mkey configure MR posted, wailting for completion...\n");
+	ret = poll_completion(cq, IBV_WC_DRIVER1);
+	if (ret) {
+		err("poll_completion(IBV_WC_DRIVER1) failed.\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+static int reg_sig_mkey_nvmedif(struct ibv_qp *qp, struct ibv_cq *cq,
+				struct mlx5dv_mkey *mkey, int mode,
+				struct sig_param *param)
+{
+	struct mlx5dv_sig_block_domain dwire = {}, dmem = {};
+	struct mlx5dv_sig_nvmedif wire_dif = {}, mem_dif = {};
+	struct mlx5dv_sig_block_attr sig_attr = {};
+	int ret;
+
+	if (!param->check_copy_en_mask) {
+		err("check_copy_en_mask is needed for nvme\n");
+		return -EINVAL;
+	}
+
+	sig_attr.comp_mask = MLX5DV_SIG_BLOCK_COMP_MASK_CHECK_COPY_EN;
+	sig_attr.check_copy_en.guard_check_en = 1;
+	sig_attr.check_copy_en.ref_tag_check_en = 1;
+	sig_attr.check_copy_en.app_tag_check_en = 1;
+	sig_attr.check_copy_en.storage_tag_check_en = 1;
+	sig_attr.check_copy_en.storage_tag_copy_en = 0xff;
+
+	if (mode & SIG_FLAG_MEM) {
+		sig_attr.mem = &dmem;
+		set_sig_domain_nvmedif(&dmem, &mem_dif);
+	}
+	if (mode & SIG_FLAG_WIRE) {
+		sig_attr.wire = &dwire;
+		set_sig_domain_nvmedif(&dwire, &wire_dif);
 	}
 
 	if (config_sig_mkey(qp, mkey, &sig_attr, mode))
@@ -460,8 +523,18 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 	ssize_t recv_len = (sig_block_size + sig_pi_size) * sig_num_blocks;
 	int ret;
 
+	ret = is_sig_supported(pd->context, param);
+	if (ret)
+		return ret;
+
 	if (param->block_num)
 		sig_num_blocks = param->block_num;
+
+	if (param->block_size)
+		sig_block_size = param->block_size;
+
+	if (param->pi_size)
+		sig_pi_size = param->pi_size;
 
 	ret = create_sig_res(pd);
 	if (ret)
@@ -485,7 +558,14 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 	info("Done\n\n");
 
 	info("Register sig mkey...\n");
-	ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_MEM | SIG_FLAG_WIRE, param);
+	if (param->sig_type == MLX5DV_SIG_TYPE_T10DIF)
+		ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey,
+					  SIG_FLAG_MEM | SIG_FLAG_WIRE, param);
+	else if (param->sig_type == MLX5DV_SIG_TYPE_NVMEDIF)
+		ret = reg_sig_mkey_nvmedif(qp, cq, sig_mkey,
+					   SIG_FLAG_MEM | SIG_FLAG_WIRE, param);
+	else
+		ret = -EOPNOTSUPP;
 	if (ret)
 		goto out;
 
@@ -556,6 +636,12 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (param->block_num)
 		sig_num_blocks = param->block_num;
 
+	if (param->block_size)
+		sig_block_size = param->block_size;
+
+	if (param->pi_size)
+		sig_pi_size = param->pi_size;
+
 	ret = create_sig_res(pd);
 	if (ret)
 		return ret;
@@ -571,7 +657,13 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 
 	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0xc0);
 	info("Register sig mkey (WIRE)...\n");
-	ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
+	if (param->sig_type == MLX5DV_SIG_TYPE_T10DIF)
+		ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
+	else if (param->sig_type == MLX5DV_SIG_TYPE_NVMEDIF)
+		ret = reg_sig_mkey_nvmedif(qp, cq, sig_mkey,
+					   SIG_FLAG_MEM | SIG_FLAG_WIRE, param);
+	else
+		ret = -EOPNOTSUPP;
 	if (ret)
 		goto out;
 	info("Done\n\n");

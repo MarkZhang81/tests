@@ -221,11 +221,20 @@ fail:
 	return err;
 }
 
+static inline char *type2str(enum mlx5dv_sig_type type)
+{
+	if (type == MLX5DV_SIG_TYPE_T10DIF)
+		return "T10DIF";
+	else if (type == MLX5DV_SIG_TYPE_NVMEDIF)
+		return "NVMEDIF";
+	else
+		return "UNKNOWN";
+}
 static int run_server(void)
 {
 	int ret;
 
-	info("Server started...\n");
+	info("Server started, sig_type %s ...\n", type2str(param.sig_type));
 	ret = setup_connection_server();
 	if (ret)
 		return ret;
@@ -344,7 +353,7 @@ static int run_client(void)
 		return -1;
 	}
 
-	info("Client started, server %s port %d...\n", ipstr, SERVER_PORT);
+	info("Client started, sig_type %s, server %s port %d...\n", type2str(param.sig_type), ipstr, SERVER_PORT);
 
 	ret = setup_connection_client();
 	if (ret)
@@ -360,11 +369,12 @@ static int run_client(void)
 static void show_usage(char *program)
 {
 	printf("Usage: %s [OPTION]\n", program);
-	printf("  [-c, --client] <server_ip>      - Run as the client (must be the last parameter)\n");
-	printf("  [-s, --server]       - Run as the server\n");
-	printf("  [-n, --block-num]    - Number of blocks (1 by default), must be same in server and client side\n");
-	printf("  [-m, --enable-check-copy-en-mask]       - Enable the check-copy-en-mask flag\n");
-	printf("  [-h, --help]         - Show help\n");
+	printf("  [-c, --client] <server_ip> - Run as the client (must be the last parameter)\n");
+	printf("  [-s, --server]    - Run as the server\n");
+	printf("  [-n, --block-num] - Number of blocks (1 by default), must be same in server and client side\n");
+	printf("  [-m, --enable-check-copy-en-mask] - Enable the check-copy-en-mask flag\n");
+	printf("  [-t, --sig-type]  - Signature type; 0 - T10DIF (default), 2 - NVMEDIF\n");
+	printf("  [-h, --help]      - Show help\n");
 	printf("Example:\n");
 	printf("  Server: %s -n 2 -s\n", program);
 	printf("  Client: %s -n 2 -c 192.168.0.64\n", program);
@@ -401,12 +411,13 @@ static int parse_opt(int argc, char *argv[])
 		{"client", 0, NULL, 'c'},
 		{"server", 0, NULL, 's'},
 		{"block-num", 0, NULL, 'n'},
+		{"sig-type", 0, NULL, 't'},
 		{"enable-check-copy-en-mask", 0, NULL, 'm'},
 		{},
 	};
 	int op, err;
 
-	while ((op = getopt_long(argc, argv, "hvcsn:m", long_opts, NULL)) != -1) {
+	while ((op = getopt_long(argc, argv, "hvcsn:mt:", long_opts, NULL)) != -1) {
                 switch (op) {
 		case 'v':
 			//printf("%s %s\n", PROJECT_NAME, PROJECT_VERSION);
@@ -442,6 +453,10 @@ static int parse_opt(int argc, char *argv[])
 			param.block_num = atoi(optarg);
 			break;
 
+		case 't':
+			param.sig_type = atoi(optarg);
+			break;
+
 		default:
 			err("Unknown option %c\n", op);
 			show_usage(argv[0]);
@@ -451,9 +466,26 @@ static int parse_opt(int argc, char *argv[])
 
 	if (my_role == ROLE_NONE) {
 		err("role not set\n");
+		show_usage(argv[0]);
 		return -1;
 	}
 
+	if (param.sig_type != MLX5DV_SIG_TYPE_T10DIF &&
+	    param.sig_type != MLX5DV_SIG_TYPE_NVMEDIF) {
+		err("Unsupported signature type %d\n", param.sig_type);
+		show_usage(argv[0]);
+		return -1;
+	}
+
+	/* FIXME: For nvmedif32 */
+	if (param.sig_type == MLX5DV_SIG_TYPE_NVMEDIF) {
+		if (!param.check_copy_en_mask) {
+			info("Enabling 'check_copy_en_mask' for NVMEDIF...\n");
+			param.check_copy_en_mask = true;
+		}
+		param.block_size = 4096;
+		param.pi_size = 16;
+	}
 	return 0;
 }
 
@@ -476,7 +508,7 @@ int main(int argc, char *argv[])
 	if (ret) {
 		perror("rdma_create_id");
 		ret = errno;
-		goto fail_create_id;
+		goto fail;
 	}
 
 	if (my_role == ROLE_SERVER)
@@ -486,7 +518,7 @@ int main(int argc, char *argv[])
 
 	rdma_destroy_id(cmid);
 
-fail_create_id:
+fail:
 	rdma_destroy_event_channel(ech);
 	return ret;
 }
