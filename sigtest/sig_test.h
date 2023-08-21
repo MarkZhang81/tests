@@ -15,7 +15,8 @@ struct sig_param {
 	unsigned int block_size;
 	unsigned int pi_size;
 
-//	int sts;		/* Storage tag size */
+	enum mlx5dv_sig_nvmedif_format nvme_fmt;
+	unsigned int sts;	/* Storage tag size, for nvmedif only */
 };
 
 static inline const char *wc_opcode_str(enum ibv_wc_opcode opcode)
@@ -53,4 +54,8 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 			  struct ibv_cq *cq, struct sig_param *param);
 int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 			  struct ibv_cq *cq, struct sig_param *param);
+
+
+int verify_sts(enum mlx5dv_sig_nvmedif_format nvme_fmt, unsigned int sts);
+unsigned int get_default_sts(enum mlx5dv_sig_nvmedif_format nvme_fmt);
 

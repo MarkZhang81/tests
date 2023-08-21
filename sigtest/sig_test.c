@@ -158,22 +158,33 @@ static void set_sig_domain_t10dif(struct mlx5dv_sig_block_domain *domain,
 		MLX5DV_BLOCK_SIZE_512 : MLX5DV_BLOCK_SIZE_4096;
 }
 
-static void set_sig_domain_nvmedif(struct mlx5dv_sig_block_domain *domain,
+static void set_sig_domain_nvmedif(struct sig_param *param,
+				   struct mlx5dv_sig_block_domain *domain,
 				   struct mlx5dv_sig_nvmedif *dif)
 {
+	int ref_tag_sz;
+
+	if (param->nvme_fmt == MLX5DV_SIG_NVMEDIF_FORMAT_16)
+		ref_tag_sz = 32 - param->sts;
+	else if (param->nvme_fmt == MLX5DV_SIG_NVMEDIF_FORMAT_32)
+		ref_tag_sz = 80 - param->sts;
+	else
+		ref_tag_sz = 48 - param->sts;
+
 	domain->sig_type = MLX5DV_SIG_TYPE_NVMEDIF;
 	domain->sig.nvmedif = dif;
 	domain->block_size = (sig_block_size == 512) ?
 		MLX5DV_BLOCK_SIZE_512 : MLX5DV_BLOCK_SIZE_4096;
 
-	dif->format = MLX5DV_SIG_NVMEDIF_FORMAT_32;
+	dif->format = param->nvme_fmt;
+	dif->sts = param->sts;
+
 	dif->seed = UINT32_MAX;
-	dif->storage_tag = 0x11223344dead5566;
-	dif->ref_tag = 0x55667788beef9900;
-	dif->sts = 20;
+	dif->storage_tag = 0x11223344dead5566 & ((1ULL << param->sts) - 1);
+	dif->ref_tag = 0x55667788beef9900 & ((1ULL << ref_tag_sz) - 1);
 
 	dif->flags = MLX5DV_SIG_NVMEDIF_FLAG_APP_REF_ESCAPE;
-	dif->app_tag = 0x6a43;
+	dif->app_tag = 0xab00;
 	dif->app_tag_check = 0xf;
 	dif->storage_tag_check = 0x3f;
 }
@@ -290,11 +301,13 @@ static int reg_sig_mkey_nvmedif(struct ibv_qp *qp, struct ibv_cq *cq,
 
 	if (mode & SIG_FLAG_MEM) {
 		sig_attr.mem = &dmem;
-		set_sig_domain_nvmedif(&dmem, &mem_dif);
+		set_sig_domain_nvmedif(param, &dmem, &mem_dif);
+		info("  nvmedif/mem: format %d, sts %d, storage_tag 0x%lx, ref_tag 0x%lx, app_tag 0x%x\n", mem_dif.format, mem_dif.sts, mem_dif.storage_tag, mem_dif.ref_tag, mem_dif.app_tag);
 	}
 	if (mode & SIG_FLAG_WIRE) {
 		sig_attr.wire = &dwire;
-		set_sig_domain_nvmedif(&dwire, &wire_dif);
+		set_sig_domain_nvmedif(param, &dwire, &wire_dif);
+		info("  nvmedif/wire: format %d, sts %d, storage_tag 0x%lx, ref_tag 0x%lx, app_tag 0x%x\n", wire_dif.format, wire_dif.sts, wire_dif.storage_tag, wire_dif.ref_tag, wire_dif.app_tag);
 	}
 
 	if (config_sig_mkey(qp, mkey, &sig_attr, mode))
@@ -698,4 +711,36 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 out:
 	destroy_sig_res();
 	return ret;
+}
+
+
+int verify_sts(enum mlx5dv_sig_nvmedif_format nvme_fmt, unsigned int sts)
+{
+	switch (nvme_fmt) {
+	case MLX5DV_SIG_NVMEDIF_FORMAT_16:
+		if (sts > 32)
+			return -1;
+		break;
+
+	case MLX5DV_SIG_NVMEDIF_FORMAT_32:
+		if ((sts < 16)  || (sts > 64))
+			return -1;
+		break;
+
+	case MLX5DV_SIG_NVMEDIF_FORMAT_64:
+		if (sts > 48)
+			return -1;
+		break;
+
+	default:
+		err("%s: Invalid nvmedif format %d\n", __func__, nvme_fmt);
+		return -1;
+	}
+
+	return 0;
+}
+
+unsigned int get_default_sts(enum mlx5dv_sig_nvmedif_format nvme_fmt)
+{
+	return 20;
 }

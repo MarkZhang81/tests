@@ -375,9 +375,18 @@ static void show_usage(char *program)
 	printf("  [-m, --enable-check-copy-en-mask] - Enable the check-copy-en-mask flag\n");
 	printf("  [-t, --sig-type]  - Signature type; 0 - T10DIF (default), 2 - NVMEDIF\n");
 	printf("  [-h, --help]      - Show help\n");
-	printf("Example:\n");
+	printf("  For nvmedif only:\n");
+	printf("    [-F, --nvmedif-format]: 0 - FORMAT_16 (default), 1 - FORMAT_32, 2 - FORMAT64\n");
+	printf("    [-S, --nvmedif-sts]: nvmedif storage tag size\n");
+	printf("\n");
+	printf("Example 1 (t10dif):\n");
 	printf("  Server: %s -n 2 -s\n", program);
 	printf("  Client: %s -n 2 -c 192.168.0.64\n", program);
+	printf("\n");
+	printf("Example 2 (nvmedif, FORMAT_32, sts=24):\n");
+	printf("  Server: %s -m -t 2 -F 1 -S 24 -s\n", program);
+	printf("  Client: %s -m -t 2 -F 1 -S 24 -c 192.168.0.64\n", program);
+	printf("\n");
 }
 
 static int get_addr(char *ip, struct sockaddr *addr)
@@ -403,6 +412,22 @@ static int get_addr(char *ip, struct sockaddr *addr)
 	return ret;
 }
 
+static unsigned int get_pi_size(struct sig_param *param)
+{
+	if (param->sig_type == MLX5DV_SIG_TYPE_NVMEDIF) {
+		if (param->nvme_fmt == MLX5DV_SIG_NVMEDIF_FORMAT_16)
+			return 8;
+		else if (param->nvme_fmt == MLX5DV_SIG_NVMEDIF_FORMAT_32 ||
+			 param->nvme_fmt == MLX5DV_SIG_NVMEDIF_FORMAT_64)
+			return 16;
+		else {
+			err("%s: Invalid nvmedif format %d\n", __func__, param->nvme_fmt);
+			exit(-EINVAL);
+		}
+	} else
+		return 8;
+
+}
 static int parse_opt(int argc, char *argv[])
 {
 	static const struct option long_opts[] = {
@@ -412,12 +437,14 @@ static int parse_opt(int argc, char *argv[])
 		{"server", 0, NULL, 's'},
 		{"block-num", 0, NULL, 'n'},
 		{"sig-type", 0, NULL, 't'},
+		{"nvmedif-format", 0, NULL, 'F'},
+		{"nvmedif-sts", 0, NULL, 'S'},
 		{"enable-check-copy-en-mask", 0, NULL, 'm'},
 		{},
 	};
 	int op, err;
 
-	while ((op = getopt_long(argc, argv, "hvcsn:mt:", long_opts, NULL)) != -1) {
+	while ((op = getopt_long(argc, argv, "hvcsn:mt:S:F:", long_opts, NULL)) != -1) {
                 switch (op) {
 		case 'v':
 			//printf("%s %s\n", PROJECT_NAME, PROJECT_VERSION);
@@ -457,6 +484,14 @@ static int parse_opt(int argc, char *argv[])
 			param.sig_type = atoi(optarg);
 			break;
 
+		case 'F':
+			param.nvme_fmt = atoi(optarg);
+			break;
+
+		case 'S':
+			param.sts = atoi(optarg);
+			break;
+
 		default:
 			err("Unknown option %c\n", op);
 			show_usage(argv[0]);
@@ -477,15 +512,32 @@ static int parse_opt(int argc, char *argv[])
 		return -1;
 	}
 
-	/* FIXME: For nvmedif32 */
 	if (param.sig_type == MLX5DV_SIG_TYPE_NVMEDIF) {
 		if (!param.check_copy_en_mask) {
 			info("Enabling 'check_copy_en_mask' for NVMEDIF...\n");
 			param.check_copy_en_mask = true;
 		}
+
+		if (param.nvme_fmt != MLX5DV_SIG_NVMEDIF_FORMAT_16 &&
+		    param.nvme_fmt != MLX5DV_SIG_NVMEDIF_FORMAT_32 &&
+		    param.nvme_fmt != MLX5DV_SIG_NVMEDIF_FORMAT_64) {
+			err("Invalid nvmedif format %d\n", param.nvme_fmt);
+			exit(-EINVAL);
+		}
+
+		if (param.sts) {
+			err = verify_sts(param.nvme_fmt, param.sts);
+			if (err) {
+				err("Invalid sts %d for nvmedif format %d\n", param.sts, param.nvme_fmt);
+				exit(-EINVAL);
+			}
+		} else
+			param.sts = get_default_sts(param.nvme_fmt);
+
 		param.block_size = 4096;
-		param.pi_size = 16;
 	}
+
+	param.pi_size = get_pi_size(&param);
 	return 0;
 }
 
