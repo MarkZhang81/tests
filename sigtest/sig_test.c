@@ -40,29 +40,44 @@ static void dump_data_buf(void)
 static void dump_data_buf_with_pi(void)
 {
 	unsigned char *p = data_buf;
-	int i;
+	int i, x;
 
 	printf("Data buf:\n");
 	for (i = 0; i < sig_num_blocks; i++) {
 		p = data_buf + (sig_block_size + sig_pi_size) * i;
 		printf("  block %02x: %02x %02x %02x %02x %02x %02x %02x %02x ...\n", i,
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+
 		p = p + sig_block_size;
 		printf("        pi: %02x %02x %02x %02x %02x %02x %02x %02x\n",
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+		x = 8;
+		while (x < sig_pi_size) {
+			printf("            %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			       p[x], p[x + 1], p[x + 2], p[x + 3],
+			       p[x + 4], p[x + 5], p[x + 6], p[x + 7]);
+			x += 8;
+		}
 	}
 }
 
 static void dump_pi(void)
 {
 	unsigned char *p = pi_buf;
-	int i;
+	int i, x;
 
 	printf("PI buf:\n");
 	for (i = 0; i < sig_num_blocks; i++) {
 		p = pi_buf + sig_pi_size * i;
-		printf("  block %02x: %02x %02x %02x %02x %02x %02x %02x %02x...\n", i,
+		printf("  block %02x: %02x %02x %02x %02x %02x %02x %02x %02x\n", i,
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+		x = 8;
+		while (x < sig_pi_size) {
+			printf("              %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			       p[x], p[x + 1], p[x + 2], p[x + 3],
+			       p[x + 4], p[x + 5], p[x + 6], p[x + 7]);
+			x += 8;
+		}
 	}
 }
 
