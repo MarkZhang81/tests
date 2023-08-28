@@ -533,7 +533,7 @@ static int check_sig_mkey(struct mlx5dv_mkey *mkey)
 int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 			  struct ibv_cq *cq, struct sig_param *param)
 {
-	ssize_t recv_len = (sig_block_size + sig_pi_size) * sig_num_blocks;
+	ssize_t recv_len;
 	int ret;
 
 	ret = is_sig_supported(pd->context, param);
@@ -548,6 +548,8 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 
 	if (param->pi_size)
 		sig_pi_size = param->pi_size;
+
+	recv_len = (sig_block_size + sig_pi_size) * sig_num_blocks;
 
 	ret = create_sig_res(pd);
 	if (ret)
@@ -639,7 +641,7 @@ static int do_send(struct ibv_qp *qp, struct ibv_cq *cq, ssize_t data_len,
 int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 			  struct ibv_cq *cq, struct sig_param *param)
 {
-	ssize_t send_len = sig_block_size * sig_num_blocks;
+	ssize_t send_len;
 	int ret;
 
 	ret = is_sig_supported(pd->context, param);
@@ -655,11 +657,13 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (param->pi_size)
 		sig_pi_size = param->pi_size;
 
+	send_len = sig_block_size * sig_num_blocks;
+
 	ret = create_sig_res(pd);
 	if (ret)
 		return ret;
 
-	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x5a);
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x21);
 
 	usleep(1000*500);
 	info("Send data (%ld bytes) without mkey...\n", send_len);
@@ -668,7 +672,7 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 		goto out;
 	info ("Done\n\n");
 
-	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0xc0);
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x41);
 	info("Register sig mkey (WIRE)...\n");
 	if (param->sig_type == MLX5DV_SIG_TYPE_T10DIF)
 		ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
@@ -697,6 +701,7 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (ret < 0)
 		goto out;
 
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x61);
 	usleep(1000 * 500);
 	info("Send data (%ld bytes) with mkey (server receives *with* mkey)...\n", send_len);
 	ret = do_send(qp, cq, send_len, sig_mkey);
