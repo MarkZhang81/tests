@@ -96,7 +96,7 @@ static int is_sig_supported(struct ibv_context *ctx, struct sig_param *param)
 
 	ret = mlx5dv_query_device(ctx, &dv_ctx);
 	if (ret) {
-		perror("mlx5dv_query_device");
+		err("mlx5dv_query_device failed %d, errno %d\n", ret, errno);
 		return ret;
 	}
 
@@ -250,7 +250,7 @@ static int config_sig_mkey(struct ibv_qp *qp, struct mlx5dv_mkey *mkey,
 	mlx5dv_wr_set_mkey_sig_block(dv_qp, sig_attr);
 	ret = ibv_wr_complete(qpx);
 	if (ret)
-		perror("ibv_wr_complete mkey configure WR");
+		err("ibv_wr_complete failed %d, errno %d\n", ret, errno);
 
 	return ret;
 }
@@ -514,7 +514,7 @@ static int check_sig_mkey(struct mlx5dv_mkey *mkey)
 
 	ret = mlx5dv_mkey_check(mkey, &err_info);
 	if (ret) {
-		perror("mlx5dv_mkey_check");
+		err("mlx5dv_mkey_check failed %d, errno %d\n", ret, errno);
 		return ret;
 	}
 
