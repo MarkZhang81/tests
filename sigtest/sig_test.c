@@ -194,7 +194,7 @@ static void set_sig_domain_nvmedif(struct sig_param *param,
 	dif->format = param->nvme_fmt;
 	dif->sts = param->sts;
 
-	dif->seed = UINT32_MAX;
+	dif->seed = 0;
 	dif->storage_tag = 0x11223344dead5566 & ((1ULL << param->sts) - 1);
 	dif->ref_tag = 0x55667788beef9900 & ((1ULL << ref_tag_sz) - 1);
 
