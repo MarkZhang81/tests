@@ -312,7 +312,6 @@ static int reg_sig_mkey_nvmedif(struct ibv_qp *qp, struct ibv_cq *cq,
 	sig_attr.check_copy_en.ref_tag_check_en = 1;
 	sig_attr.check_copy_en.app_tag_check_en = 1;
 	sig_attr.check_copy_en.storage_tag_check_en = 1;
-	sig_attr.check_copy_en.storage_tag_copy_en = 0xff;
 
 	if (mode & SIG_FLAG_MEM) {
 		sig_attr.mem = &dmem;
@@ -324,6 +323,12 @@ static int reg_sig_mkey_nvmedif(struct ibv_qp *qp, struct ibv_cq *cq,
 		set_sig_domain_nvmedif(param, &dwire, &wire_dif);
 		info("  nvmedif/wire: format %d, sts %d, storage_tag 0x%lx, ref_tag 0x%lx, app_tag 0x%x\n", wire_dif.format, wire_dif.sts, wire_dif.storage_tag, wire_dif.ref_tag, wire_dif.app_tag);
 	}
+
+	if (sig_attr.mem && sig_attr.wire &&
+	    (sig_attr.mem->sig_type == sig_attr.wire->sig_type) &&
+	    (sig_attr.mem->block_size == sig_attr.wire->block_size) &&
+	    (sig_attr.mem->sig.nvmedif->format == sig_attr.wire->sig.nvmedif->format))
+		sig_attr.check_copy_en.storage_tag_copy_en = 0xff;
 
 	if (config_sig_mkey(qp, mkey, &sig_attr, mode))
 		return -1;
@@ -692,8 +697,7 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (param->sig_type == MLX5DV_SIG_TYPE_T10DIF)
 		ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
 	else if (param->sig_type == MLX5DV_SIG_TYPE_NVMEDIF)
-		ret = reg_sig_mkey_nvmedif(qp, cq, sig_mkey,
-					   SIG_FLAG_MEM | SIG_FLAG_WIRE, param);
+		ret = reg_sig_mkey_nvmedif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
 	else
 		ret = -EOPNOTSUPP;
 	if (ret)
