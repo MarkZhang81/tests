@@ -720,7 +720,6 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (ret < 0)
 		goto out;
 
-	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x61);
 	usleep(1000 * 500);
 	info("Send data (%ld bytes) with mkey (server receives *with* mkey)...\n", send_len);
 	ret = do_send(qp, cq, send_len, sig_mkey);
