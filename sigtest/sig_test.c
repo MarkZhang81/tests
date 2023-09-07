@@ -161,7 +161,7 @@ static void set_sig_domain_t10dif(struct mlx5dv_sig_block_domain *domain,
 {
 	memset(dif, 0, sizeof(*dif));
 	dif->bg_type = MLX5DV_SIG_T10DIF_CRC;
-	dif->bg = 0xffff;
+	dif->bg = 0;
 	dif->app_tag = 0x5678;
 	dif->ref_tag = 0xabcdef90;
 	dif->flags = MLX5DV_SIG_T10DIF_FLAG_REF_REMAP | MLX5DV_SIG_T10DIF_FLAG_APP_ESCAPE;
