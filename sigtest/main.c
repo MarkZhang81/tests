@@ -234,7 +234,11 @@ static int run_server(void)
 {
 	int ret;
 
-	info("Server started, sig_type %s ...\n", type2str(param.sig_type));
+	if (param.sig_type == MLX5DV_SIG_TYPE_NVMEDIF)
+		info("Server started, sig_type NVMEDIF format %d...\n", param.nvme_fmt);
+	else
+		info("Server started, sig_type %s...\n", type2str(param.sig_type));
+
 	ret = setup_connection_server();
 	if (ret)
 		return ret;
@@ -353,7 +357,12 @@ static int run_client(void)
 		return -1;
 	}
 
-	info("Client started, sig_type %s, server %s port %d...\n", type2str(param.sig_type), ipstr, SERVER_PORT);
+	if (param.sig_type == MLX5DV_SIG_TYPE_NVMEDIF)
+		info("Client started, sig_type NVMEDIF format %d, server %s port %d...\n",
+		     param.nvme_fmt, ipstr, SERVER_PORT);
+	else
+		info("Client started, sig_type %s, server %s port %d...\n",
+		     type2str(param.sig_type), ipstr, SERVER_PORT);
 
 	ret = setup_connection_client();
 	if (ret)
