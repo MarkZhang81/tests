@@ -73,7 +73,7 @@ static void dump_pi(void)
 		       p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
 		x = 8;
 		while (x < sig_pi_size) {
-			printf("              %02x %02x %02x %02x %02x %02x %02x %02x\n",
+			printf("            %02x %02x %02x %02x %02x %02x %02x %02x\n",
 			       p[x], p[x + 1], p[x + 2], p[x + 3],
 			       p[x + 4], p[x + 5], p[x + 6], p[x + 7]);
 			x += 8;
@@ -199,7 +199,7 @@ static void set_sig_domain_nvmedif(struct sig_param *param,
 	dif->ref_tag = 0x55667788beef9900 & ((1ULL << ref_tag_sz) - 1);
 
 	dif->flags = MLX5DV_SIG_NVMEDIF_FLAG_APP_REF_ESCAPE;
-	dif->app_tag = 0xab00;
+	dif->app_tag = 0xabcd;
 	dif->app_tag_check = 0xf;
 	dif->storage_tag_check = 0x3f;
 }
