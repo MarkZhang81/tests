@@ -201,7 +201,7 @@ static void set_sig_domain_nvmedif(struct sig_param *param,
 	dif->flags = MLX5DV_SIG_NVMEDIF_FLAG_APP_REF_ESCAPE;
 	dif->app_tag = 0xabcd;
 	dif->app_tag_check = 0xf;
-	dif->storage_tag_check = 0x3f;
+	dif->storage_tag_check = dif->sts;
 }
 
 static int config_sig_mkey(struct ibv_qp *qp, struct mlx5dv_mkey *mkey,
