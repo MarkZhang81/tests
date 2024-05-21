@@ -269,10 +269,12 @@ static int reg_sig_mkey_t10dif(struct ibv_qp *qp, struct ibv_cq *cq,
 	if (mode & SIG_FLAG_MEM) {
 		sig_attr.mem = &dmem;
 		set_sig_domain_t10dif(&dmem, &mem_t10dif);
+		info("t10dif/mem: ref_tag 0x%x, app_tag 0x%x\n", mem_t10dif.ref_tag, mem_t10dif.app_tag);
 	}
 	if (mode & SIG_FLAG_WIRE) {
 		sig_attr.wire = &dwire;
 		set_sig_domain_t10dif(&dwire, &wire_t10dif);
+		info("t10dif/wire: ref_tag 0x%x, app_tag 0x%x\n", wire_t10dif.ref_tag, wire_t10dif.app_tag);
 	}
 
 	if (param && param->check_copy_en_mask) {
@@ -283,7 +285,7 @@ static int reg_sig_mkey_t10dif(struct ibv_qp *qp, struct ibv_cq *cq,
 	if (config_sig_mkey(qp, mkey, &sig_attr, mode))
 		return -1;
 
-	info("Mkey configure MR posted, wailting for completion...\n");
+	info("Mkey configure MR posted, waiting for completion...\n");
 	ret = poll_completion(cq, IBV_WC_DRIVER1);
 	if (ret) {
 		err("poll_completion(IBV_WC_DRIVER1) failed.\n");
@@ -333,7 +335,7 @@ static int reg_sig_mkey_nvmedif(struct ibv_qp *qp, struct ibv_cq *cq,
 	if (config_sig_mkey(qp, mkey, &sig_attr, mode))
 		return -1;
 
-	info("Mkey configure MR posted, wailting for completion...\n");
+	info("Mkey configure MR posted, waiting for completion...\n");
 	ret = poll_completion(cq, IBV_WC_DRIVER1);
 	if (ret) {
 		err("poll_completion(IBV_WC_DRIVER1) failed.\n");
