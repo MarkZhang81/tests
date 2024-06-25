@@ -538,6 +538,9 @@ static int check_sig_mkey(struct mlx5dv_mkey *mkey)
 	case MLX5DV_MKEY_SIG_BLOCK_BAD_GUARD:
 		sig_err_str = "BLOCK_GUARD";
 		break;
+	case MLX5DV_MKEY_SIG_BLOCK_BAD_STORAGETAG:
+		sig_err_str = "STORAGE_TAG";
+		break;
 	default:
 		err("unknown sig error %d\n", sig_err);
 		break;
@@ -607,7 +610,7 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 		goto out;
 
 	init_buf(data_buf, recv_len, 0);
-	info("Receving data (sent with mkey enabled)...\n");
+	info("Receving data 2nd time (sent with mkey enabled)...\n");
 	ret = do_recv(qp, cq, sig_mkey);
 	if (ret)
 		goto out;
@@ -617,6 +620,8 @@ int start_sig_test_server(struct ibv_pd *pd, struct ibv_qp *qp,
 	info("Done\n\n");
 
 out:
+	if (sig_mkey)
+		check_sig_mkey(sig_mkey);
 	destroy_sig_res();
 	return ret;
 }
@@ -729,11 +734,10 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 		goto out;
 	info ("Done\n\n");
 
-	ret = check_sig_mkey(sig_mkey);
-	if (ret < 0)
-		goto out;
-
 out:
+	if (sig_mkey)
+		check_sig_mkey(sig_mkey);
+
 	destroy_sig_res();
 	return ret;
 }
