@@ -690,7 +690,7 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	if (ret)
 		return ret;
 
-	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0xff);
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0x00);
 
 	usleep(1000*500);
 	info("Send data (%ld bytes) without mkey...\n", send_len);
@@ -699,7 +699,6 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 		goto out;
 	info ("Done\n\n");
 
-	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0xff);
 	info("Register sig mkey (WIRE)...\n");
 	if (param->sig_type == MLX5DV_SIG_TYPE_T10DIF)
 		ret = reg_sig_mkey_t10dif(qp, cq, sig_mkey, SIG_FLAG_WIRE, param);
@@ -726,6 +725,8 @@ int start_sig_test_client(struct ibv_pd *pd, struct ibv_qp *qp,
 	ret = check_sig_mkey(sig_mkey);
 	if (ret < 0)
 		goto out;
+
+	init_send_buf(data_buf, sig_block_size, sig_num_blocks, 0xff);
 
 	usleep(1000 * 500);
 	info("Send data (%ld bytes) with mkey (server receives *with* mkey)...\n", send_len);
