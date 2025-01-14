@@ -56,7 +56,7 @@ static int setup_qp_client(void)
 	};
 
 	ret = rdma_create_qp(cm_id, pd, &init_attr);
-	if (!ret) {
+	if (ret) {
 		perror("rdma_create_qp");
 		return -1;
 	}
@@ -71,7 +71,7 @@ static int start_cm_client(void)
         struct rdma_cm_event *e;
 	int err;
 
-	INFO("Server IP %s port %d..\n", server, SERVER_PORT);
+	INFO("Server IP %s port %d..", server, SERVER_PORT);
 	ech = rdma_create_event_channel();
 	if (ech == NULL) {
 		perror("rdma_create_event_channel");
@@ -100,7 +100,8 @@ static int start_cm_client(void)
 
 	err = rdma_get_cm_event(ech, &e);
 	if (err || (e->event != RDMA_CM_EVENT_ADDR_RESOLVED)) {
-		ERR("expects RDMA_CM_EVENT_ADDR_RESOLVED get %d: %d \n", e->event, err);
+		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s): %d",
+		    e->event, rdma_event_str(e->event), err);
 		return -1;
 	}
 	err = rdma_ack_cm_event(e);
@@ -118,7 +119,8 @@ static int start_cm_client(void)
 
 	err = rdma_get_cm_event(ech, &e);
 	if (err || (e->event != RDMA_CM_EVENT_ROUTE_RESOLVED)) {
-		ERR("expects RDMA_CM_EVENT_ADDR_RESOLVED get %d: %d \n", e->event, err);
+		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s): %d",
+		    e->event, rdma_event_str(e->event), err);
 		return -1;
 	}
 	err = rdma_ack_cm_event(e);
@@ -141,7 +143,8 @@ static int start_cm_client(void)
 
 	err = rdma_get_cm_event(ech, &e);
 	if (err || (e->event != RDMA_CM_EVENT_ESTABLISHED)) {
-		ERR("expects RDMA_CM_EVENT_ESTABLISHED get %d: %d \n", e->event, err);
+		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s): %d",
+		    e->event, rdma_event_str(e->event), err);
 		return -1;
 	}
 	err = rdma_ack_cm_event(e);
@@ -149,7 +152,7 @@ static int start_cm_client(void)
 		perror("rdma_ack_cm_event");
 		return err;
 	}
-	INFO("connection established");
+	INFO("Connection established");
 
 	return 0;
 }

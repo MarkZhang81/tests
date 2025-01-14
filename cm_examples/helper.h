@@ -5,8 +5,15 @@
 
 #define BUFSIZE 4096
 
-#define INFO printf
-#define ERR printf
+#if defined(LOG_LEVEL)
+#define INFO(fmt, args...) \
+	printf("=MZINFO:%s:%d: " fmt "\n", __func__, __LINE__, ##args)
+#else
+#define INFO
+#endif
+
+#define ERR(fmt, args...) \
+	fprintf(stderr, "=MZERR:%s:%d(%d:%s) " fmt "\n", __func__, __LINE__, errno, strerror(errno), ##args)
 
 /*
 static inline void INFO(const char *s)
