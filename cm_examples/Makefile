@@ -5,9 +5,12 @@ CFLAGS := -Wall -g
 LIBS := -lrdmacm -libverbs -lmlx5 -lpthread
 HEADERS := params.h helper.h
 
-all: client
+all: client server
 
 client: client.o
+	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
+
+server: server.o
 	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
 
 %.o: %.c $(HEADERS)

@@ -48,7 +48,7 @@ static int setup_qp_client(void)
 			.max_recv_wr = 32,
 			.max_send_sge = 1,
 			.max_recv_sge = 1,
-			//.max_inline_data = 64,
+			.max_inline_data = 64,
 		},
 		.qp_type = IBV_QPT_RC,
 		.send_cq = cq,
@@ -159,6 +159,7 @@ static int start_cm_client(void)
 
 static void send_data(void)
 {
+
 	struct ibv_sge sg_list = {
 		.addr   = (uintptr_t)buf,
 		.length = 0,
@@ -175,6 +176,8 @@ static void send_data(void)
 	struct ibv_wc wc;
 
 	do {
+		INFO("Sleep 2 seconds to wait server to prepare..");
+		sleep(2);
 		snprintf(buf, BUFSIZE, "A message from client: %d", msgid++);
 		size = strlen(buf);
 		sg_list.length = size;
@@ -215,6 +218,7 @@ int main(int argc, char *argv[])
 	rdma_disconnect(cm_id);
 	rdma_destroy_qp(cm_id);
 	ibv_destroy_cq(cq);
+	ibv_dereg_mr(mr);
 	ibv_dealloc_pd(pd);
 	rdma_destroy_id(cm_id);
 
