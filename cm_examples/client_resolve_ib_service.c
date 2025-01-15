@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include <infiniband/ib.h>
 #include <rdma/rdma_cma.h>
 
 #include "helper.h"
@@ -12,8 +13,6 @@
 
 static struct rdma_event_channel *ech;
 static struct rdma_cm_id *cm_id;
-
-static const char *server = SERVER_IP;
 
 static struct ibv_pd *pd;
 static struct ibv_cq *cq;
@@ -64,15 +63,32 @@ static int setup_qp_client(void)
 	return 0;
 }
 
+#define dump printf
+static void dump_addrinfo(struct rdma_addrinfo *ai, int n)
+{
+	struct sockaddr_ib *sib = (struct sockaddr_ib *)ai->ai_dst_addr;
+
+        dump("addrinfo[%d]:\n", n);
+        dump("  ai_flags: %d\n", ai->ai_flags);
+        dump("  ai_family: %d\n", ai->ai_family);
+        dump("  ai_port_space: %d\n", ai->ai_port_space);
+        dump("  ai_dst_len: %d\n", ai->ai_dst_len);
+        dump("  ai_dst_addr.sib_pkey: 0x%x(be16)\n", sib->sib_pkey);
+        dump("  ai_dst_addr.sib_addr: 0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x\n",
+	     sib->sib_addr.sib_addr16[0], sib->sib_addr.sib_addr16[1],
+	     sib->sib_addr.sib_addr16[2], sib->sib_addr.sib_addr16[3],
+	     sib->sib_addr.sib_addr16[4], sib->sib_addr.sib_addr16[5],
+	     sib->sib_addr.sib_addr16[6], sib->sib_addr.sib_addr16[7]);
+}
 static int start_cm_client(void)
 {
 	struct rdma_conn_param param = {};
-	struct rdma_addrinfo hints = {};
+	struct rdma_addrinfo hints = {}, *info;
 	struct sockaddr_in sin = {};
         struct rdma_cm_event *e;
-	int err;
+	int err, n = 0;
 
-	INFO("Server IP %s port %d..", server, SERVER_PORT);
+	INFO("Start client with IB resolve_addrinfo..");
 	ech = rdma_create_event_channel();
 	if (ech == NULL) {
 		perror("rdma_create_event_channel");
@@ -85,18 +101,25 @@ static int start_cm_client(void)
 		return err;
 	}
 
+	/* bind_addr() before resolve_addrinfo() */
 	sin.sin_family = AF_INET;
-	sin.sin_port   = htons(SERVER_PORT);
-	err = inet_pton(AF_INET, server, &sin.sin_addr);
+	sin.sin_port   = htons(CM_EXAMPLE_SERVER_PORT);
+	err = inet_pton(AF_INET, CM_EXAMPLE_LOCAL_IP, &sin.sin_addr);
 	if (err != 1) {
 		perror("inet_pton");
 		return err;
 	}
+	err = rdma_bind_addr(cm_id, (struct sockaddr *)&sin);
+        if (err) {
+		perror("rdma_bind_addr");
+		return err;
+	}
 
 	hints.ai_flags = RAI_SA;
-	err = rdma_resolve_addrinfo(cm_id, NULL, "20913455", &hints);
+	err = rdma_resolve_addrinfo(cm_id, NULL,
+				    CM_EXAMPLE_IB_SERVICE_ID, &hints);
 	if (err) {
-		perror("rdma_resolve_addr");
+		perror("rdma_resolve_addrinfo");
 		return err;
 	}
 
@@ -111,7 +134,19 @@ static int start_cm_client(void)
 		perror("rdma_ack_cm_event");
 		return err;
 	}
-	INFO("rdma_resolve_addr done");
+	INFO("rdma_resolve_addrinfo done");
+
+	err = rdma_query_addrinfo(cm_id, &info);
+	if (err || !info) {
+		ERR("rdma_query_addrinfo, err %d info %p", err, info);
+		return err;
+	}
+
+	do {
+		dump_addrinfo(info, n);
+		info = info->ai_next;
+		n++;
+	} while (info);
 
 	err = rdma_resolve_route(cm_id, 5000);
 	if (err) {

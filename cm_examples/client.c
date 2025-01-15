@@ -13,7 +13,7 @@
 static struct rdma_event_channel *ech;
 static struct rdma_cm_id *cm_id;
 
-static const char *server = SERVER_IP;
+static const char *server = CM_EXAMPLE_SERVER_IP;
 
 static struct ibv_pd *pd;
 static struct ibv_cq *cq;
@@ -71,7 +71,7 @@ static int start_cm_client(void)
         struct rdma_cm_event *e;
 	int err;
 
-	INFO("Server IP %s port %d..", server, SERVER_PORT);
+	INFO("Server IP %s port %d..", server, CM_EXAMPLE_SERVER_PORT);
 	ech = rdma_create_event_channel();
 	if (ech == NULL) {
 		perror("rdma_create_event_channel");
@@ -85,7 +85,7 @@ static int start_cm_client(void)
 	}
 
 	sin.sin_family = AF_INET;
-	sin.sin_port   = htons(SERVER_PORT);
+	sin.sin_port   = htons(CM_EXAMPLE_SERVER_PORT);
 	err = inet_pton(AF_INET, server, &sin.sin_addr);
 	if (err != 1) {
 		perror("inet_pton");

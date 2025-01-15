@@ -16,7 +16,7 @@ server: server.o
 client_resolve_ib_service: client_resolve_ib_service.o
 	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
 
-%.o: %.c $(HEADERS)
+%.o: %.c $(HEADERS) Makefile
 	$(CC) $(CFLAGS) -c $<
 
 clean:

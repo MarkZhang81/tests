@@ -83,7 +83,7 @@ static int server_init(void)
 	}
 
 	sin.sin_family = AF_INET;
-	sin.sin_port = htons(SERVER_PORT);
+	sin.sin_port = htons(CM_EXAMPLE_SERVER_PORT);
 	sin.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	err = rdma_bind_addr(listen_id, (struct sockaddr *)&sin);
@@ -92,7 +92,7 @@ static int server_init(void)
 		return err;
 	}
 
-	INFO("bound to port %d", SERVER_PORT);
+	INFO("bound to port %d", CM_EXAMPLE_SERVER_PORT);
 
 	err = rdma_listen(listen_id, 10);
         if (err) {
