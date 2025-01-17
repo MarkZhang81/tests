@@ -15,6 +15,8 @@
 #define ERR(fmt, args...) \
 	fprintf(stderr, "=MZERR:%s:%d(%d:%s) " fmt "\n", __func__, __LINE__, errno, strerror(errno), ##args)
 
+#define dump printf
+
 /*
 static inline void INFO(const char *s)
 {

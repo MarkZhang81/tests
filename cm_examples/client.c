@@ -178,7 +178,8 @@ static void send_data(void)
 	do {
 		INFO("Sleep 2 seconds to wait server to prepare..");
 		sleep(2);
-		snprintf(buf, BUFSIZE, "A message from client: %d", msgid++);
+		snprintf(buf, BUFSIZE, "(%d)A message from client, with IP port_space",
+			 msgid++);
 		size = strlen(buf);
 		sg_list.length = size;
 
@@ -187,7 +188,7 @@ static void send_data(void)
 			perror("ibv_post_send");
 			return;
 		}
-		INFO("data sent; size %d", size);
+		INFO("Sent(size %d): `%s'", size, buf);
 
 		do {
 			num_comp = ibv_poll_cq(cq, 1, &wc);

@@ -19,6 +19,8 @@ static struct ibv_cq *cq;
 
 static char buf[BUFSIZE];
 
+static int server_port_space = RDMA_PS_TCP;
+
 static int setup_qp_server(struct rdma_cm_id *cid)
 {
 	int ret;
@@ -65,10 +67,34 @@ static int setup_qp_server(struct rdma_cm_id *cid)
 
 static int server_init(void)
 {
+	struct rdma_addrinfo hints = {}, *rai = NULL;
 	struct rdma_conn_param param = {};
 	struct sockaddr_in sin = {};
 	struct rdma_cm_event *e;
+	struct sockaddr *sa;
 	int err;
+
+	if (server_port_space == RDMA_PS_IB) {
+		hints.ai_flags = RAI_NUMERICHOST | RAI_FAMILY | RAI_PASSIVE;
+		hints.ai_family = AF_IB;
+		hints.ai_port_space = RDMA_PS_IB;
+		//err = rdma_getaddrinfo(NULL, CM_EXAMPLE_SERVER_PORT_STR, &hints, &rai);
+		err = rdma_getaddrinfo(NULL, "7471", &hints, &rai);
+		if (err) {
+			perror("rdma_getaddrinfo");
+			return err;
+		}
+		sa = rai->ai_src_addr;
+	//r = rdma_getaddrinfo(NULL, "7471", &hints, &rai);
+	} else if (server_port_space == RDMA_PS_TCP) {
+		sin.sin_family = AF_INET;
+		sin.sin_port = htons(CM_EXAMPLE_SERVER_PORT);
+		sin.sin_addr.s_addr = htonl(INADDR_ANY);
+		sa = (struct sockaddr *)&sin;
+	} else {
+		ERR("Unsupported port_space %d", server_port_space);
+		return -1;
+	}
 
 	ech = rdma_create_event_channel();
 	if (ech == NULL) {
@@ -76,23 +102,20 @@ static int server_init(void)
 		return errno;
 	}
 
-	err = rdma_create_id(ech, &listen_id, NULL, RDMA_PS_TCP);
+	err = rdma_create_id(ech, &listen_id, NULL, server_port_space);
 	if (err) {
 		perror("rdma_create_id");
 		return err;
 	}
 
-	sin.sin_family = AF_INET;
-	sin.sin_port = htons(CM_EXAMPLE_SERVER_PORT);
-	sin.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	err = rdma_bind_addr(listen_id, (struct sockaddr *)&sin);
+	err = rdma_bind_addr(listen_id, sa);
         if (err) {
 		perror("rdma_bind_addr");
 		return err;
 	}
-
-	INFO("bound to port %d", CM_EXAMPLE_SERVER_PORT);
+	INFO("bound done, port space 0x%x port %d", server_port_space, CM_EXAMPLE_SERVER_PORT);
+	if (rai)
+		rdma_freeaddrinfo(rai);
 
 	err = rdma_listen(listen_id, 10);
         if (err) {
@@ -241,9 +264,38 @@ static void server_uninit(void)
 	rdma_destroy_id(listen_id);
 }
 
-int main(void)
+static int parse_opt(int argc, char *argv[])
+{
+	int op;
+
+	while ((op = getopt(argc, argv, "P:")) != -1) {
+		switch (op) {
+		case 'P':
+			if (!strncasecmp("ib", optarg, 2)) {
+				server_port_space = RDMA_PS_IB;
+				INFO("Set port space to RDMA_PS_IB");
+			} else if (strncasecmp("tcp", optarg, 3)) {
+				fprintf(stderr, "Warning: unknown port space format: %s\n", optarg);
+				return -EINVAL;
+			}
+			break;
+		default:
+			dump("Usage: server [-P <port_space>]\n");
+			dump("Examples: server -P ib\n");
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+int main(int argc, char *argv[])
 {
 	int ret;
+
+	ret = parse_opt(argc, argv);
+	if (ret)
+		return ret;
 
 	ret = server_init();
 	if (ret)

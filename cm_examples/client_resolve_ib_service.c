@@ -63,28 +63,26 @@ static int setup_qp_client(void)
 	return 0;
 }
 
-#define dump printf
 static void dump_addrinfo(struct rdma_addrinfo *ai, int n)
 {
 	struct sockaddr_ib *sib = (struct sockaddr_ib *)ai->ai_dst_addr;
 
         dump("addrinfo[%d]:\n", n);
-        dump("  ai_flags: %d\n", ai->ai_flags);
-        dump("  ai_family: %d\n", ai->ai_family);
-        dump("  ai_port_space: %d\n", ai->ai_port_space);
+        dump("  ai_flags: 0x%x\n", ai->ai_flags);
+        dump("  ai_family: 0x%x\n", ai->ai_family);
+        dump("  ai_port_space: 0x%x\n", ai->ai_port_space);
         dump("  ai_dst_len: %d\n", ai->ai_dst_len);
         dump("  ai_dst_addr.sib_pkey: 0x%x(be16)\n", sib->sib_pkey);
         dump("  ai_dst_addr.sib_addr: 0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x\n",
-	     sib->sib_addr.sib_addr16[0], sib->sib_addr.sib_addr16[1],
-	     sib->sib_addr.sib_addr16[2], sib->sib_addr.sib_addr16[3],
-	     sib->sib_addr.sib_addr16[4], sib->sib_addr.sib_addr16[5],
-	     sib->sib_addr.sib_addr16[6], sib->sib_addr.sib_addr16[7]);
+	     htobe16(sib->sib_addr.sib_addr16[0]), htobe16(sib->sib_addr.sib_addr16[1]),
+	     htobe16(sib->sib_addr.sib_addr16[2]), htobe16(sib->sib_addr.sib_addr16[3]),
+	     htobe16(sib->sib_addr.sib_addr16[4]), htobe16(sib->sib_addr.sib_addr16[5]),
+	     htobe16(sib->sib_addr.sib_addr16[6]), htobe16(sib->sib_addr.sib_addr16[7]));
 }
 static int start_cm_client(void)
 {
+	struct rdma_addrinfo hints = {}, *rai = NULL;
 	struct rdma_conn_param param = {};
-	struct rdma_addrinfo hints = {}, *info;
-	struct sockaddr_in sin = {};
         struct rdma_cm_event *e;
 	int err, n = 0;
 
@@ -95,11 +93,14 @@ static int start_cm_client(void)
 		return -1;
 	}
 
-	err = rdma_create_id(ech, &cm_id, NULL, RDMA_PS_TCP);
+	err = rdma_create_id(ech, &cm_id, NULL, RDMA_PS_IB);
 	if (err) {
 		perror("rdma_create_id");
 		return err;
 	}
+
+#if 0
+	struct sockaddr_in sin = {};
 
 	/* bind_addr() before resolve_addrinfo() */
 	sin.sin_family = AF_INET;
@@ -110,10 +111,25 @@ static int start_cm_client(void)
 		return err;
 	}
 	err = rdma_bind_addr(cm_id, (struct sockaddr *)&sin);
+#endif
+	hints.ai_flags = RAI_NUMERICHOST | RAI_FAMILY | RAI_PASSIVE;
+	hints.ai_family = AF_IB;
+	hints.ai_port_space = RDMA_PS_IB;
+	err = rdma_getaddrinfo(CM_EXAMPLE_CLIENT_GID,
+			       CM_EXAMPLE_SERVER_PORT_STR, &hints, &rai);
+	if (err) {
+		perror("rdma_getaddrinfo");
+		return err;
+	}
+
+	err = rdma_bind_addr(cm_id, rai->ai_src_addr);
         if (err) {
 		perror("rdma_bind_addr");
 		return err;
 	}
+	INFO("bind_addr(%s) done", CM_EXAMPLE_CLIENT_GID);
+	rdma_freeaddrinfo(rai);
+	rai = NULL;
 
 	hints.ai_flags = RAI_SA;
 	err = rdma_resolve_addrinfo(cm_id, NULL,
@@ -125,8 +141,8 @@ static int start_cm_client(void)
 
 	err = rdma_get_cm_event(ech, &e);
 	if (err || (e->event != RDMA_CM_EVENT_ADDRINFO_RESOLVED)) {
-		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s): %d",
-		    e->event, rdma_event_str(e->event), err);
+		ERR("Expects RDMA_CM_EVENT_ADDRINFO_RESOLVED get %d(%s) status %d, err %d",
+		    e->event, rdma_event_str(e->event), e->status, err);
 		return -1;
 	}
 	err = rdma_ack_cm_event(e);
@@ -136,17 +152,17 @@ static int start_cm_client(void)
 	}
 	INFO("rdma_resolve_addrinfo done");
 
-	err = rdma_query_addrinfo(cm_id, &info);
-	if (err || !info) {
-		ERR("rdma_query_addrinfo, err %d info %p", err, info);
+	err = rdma_query_addrinfo(cm_id, &rai);
+	if (err || !rai) {
+		ERR("rdma_query_addrinfo, err %d info %p", err, rai);
 		return err;
 	}
 
 	do {
-		dump_addrinfo(info, n);
-		info = info->ai_next;
+		dump_addrinfo(rai, n);
+		rai = rai->ai_next;
 		n++;
-	} while (info);
+	} while (rai);
 
 	err = rdma_resolve_route(cm_id, 5000);
 	if (err) {
@@ -156,8 +172,8 @@ static int start_cm_client(void)
 
 	err = rdma_get_cm_event(ech, &e);
 	if (err || (e->event != RDMA_CM_EVENT_ROUTE_RESOLVED)) {
-		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s): %d",
-		    e->event, rdma_event_str(e->event), err);
+		ERR("Expects RDMA_CM_EVENT_ROUTE_RESOLVED get %d(%s) status %d, err %d",
+		    e->event, rdma_event_str(e->event), e->status, err);
 		return -1;
 	}
 	err = rdma_ack_cm_event(e);
@@ -180,8 +196,8 @@ static int start_cm_client(void)
 
 	err = rdma_get_cm_event(ech, &e);
 	if (err || (e->event != RDMA_CM_EVENT_ESTABLISHED)) {
-		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s): %d",
-		    e->event, rdma_event_str(e->event), err);
+		ERR("Expects RDMA_CM_EVENT_ESTABLISHED get %d(%s) status %d, err %d",
+		    e->event, rdma_event_str(e->event), e->status, err);
 		return -1;
 	}
 	err = rdma_ack_cm_event(e);
@@ -215,7 +231,8 @@ static void send_data(void)
 	do {
 		INFO("Sleep 2 seconds to wait server to prepare..");
 		sleep(2);
-		snprintf(buf, BUFSIZE, "A message from client: %d", msgid++);
+		snprintf(buf, BUFSIZE, "(%d)A message from client %s",
+			 msgid++, CM_EXAMPLE_CLIENT_GID);
 		size = strlen(buf);
 		sg_list.length = size;
 
@@ -224,7 +241,7 @@ static void send_data(void)
 			perror("ibv_post_send");
 			return;
 		}
-		INFO("data sent; size %d", size);
+		INFO("Sent(size %d): `%s'", size, buf);
 
 		do {
 			num_comp = ibv_poll_cq(cq, 1, &wc);
