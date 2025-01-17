@@ -78,13 +78,14 @@ static int server_init(void)
 		hints.ai_flags = RAI_NUMERICHOST | RAI_FAMILY | RAI_PASSIVE;
 		hints.ai_family = AF_IB;
 		hints.ai_port_space = RDMA_PS_IB;
-		//err = rdma_getaddrinfo(NULL, CM_EXAMPLE_SERVER_PORT_STR, &hints, &rai);
-		err = rdma_getaddrinfo(NULL, "7471", &hints, &rai);
+		err = rdma_getaddrinfo(NULL, CM_EXAMPLE_SERVER_PORT_STR, &hints, &rai);
 		if (err) {
 			perror("rdma_getaddrinfo");
 			return err;
 		}
 		sa = rai->ai_src_addr;
+		dump_sockaddr_ib("src_addr", (struct sockaddr_ib *)rai->ai_src_addr);
+
 	//r = rdma_getaddrinfo(NULL, "7471", &hints, &rai);
 	} else if (server_port_space == RDMA_PS_TCP) {
 		sin.sin_family = AF_INET;
@@ -113,7 +114,8 @@ static int server_init(void)
 		perror("rdma_bind_addr");
 		return err;
 	}
-	INFO("bound done, port space 0x%x port %d", server_port_space, CM_EXAMPLE_SERVER_PORT);
+	INFO("bound done, port space 0x%x port %s (in resolve ib service tests this port must be low 16-bit of the registered serviceID)",
+	     server_port_space, CM_EXAMPLE_SERVER_PORT_STR);
 	if (rai)
 		rdma_freeaddrinfo(rai);
 

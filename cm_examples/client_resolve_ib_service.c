@@ -63,22 +63,6 @@ static int setup_qp_client(void)
 	return 0;
 }
 
-static void dump_addrinfo(struct rdma_addrinfo *ai, int n)
-{
-	struct sockaddr_ib *sib = (struct sockaddr_ib *)ai->ai_dst_addr;
-
-        dump("addrinfo[%d]:\n", n);
-        dump("  ai_flags: 0x%x\n", ai->ai_flags);
-        dump("  ai_family: 0x%x\n", ai->ai_family);
-        dump("  ai_port_space: 0x%x\n", ai->ai_port_space);
-        dump("  ai_dst_len: %d\n", ai->ai_dst_len);
-        dump("  ai_dst_addr.sib_pkey: 0x%x(be16)\n", sib->sib_pkey);
-        dump("  ai_dst_addr.sib_addr: 0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x:0x%04x\n",
-	     htobe16(sib->sib_addr.sib_addr16[0]), htobe16(sib->sib_addr.sib_addr16[1]),
-	     htobe16(sib->sib_addr.sib_addr16[2]), htobe16(sib->sib_addr.sib_addr16[3]),
-	     htobe16(sib->sib_addr.sib_addr16[4]), htobe16(sib->sib_addr.sib_addr16[5]),
-	     htobe16(sib->sib_addr.sib_addr16[6]), htobe16(sib->sib_addr.sib_addr16[7]));
-}
 static int start_cm_client(void)
 {
 	struct rdma_addrinfo hints = {}, *rai = NULL;
@@ -115,12 +99,17 @@ static int start_cm_client(void)
 	hints.ai_flags = RAI_NUMERICHOST | RAI_FAMILY | RAI_PASSIVE;
 	hints.ai_family = AF_IB;
 	hints.ai_port_space = RDMA_PS_IB;
-	err = rdma_getaddrinfo(CM_EXAMPLE_CLIENT_GID,
-			       CM_EXAMPLE_SERVER_PORT_STR, &hints, &rai);
+	//err = rdma_getaddrinfo(CM_EXAMPLE_CLIENT_GID, CM_EXAMPLE_SERVER_PORT_STR, &hints, &rai);
+
+	/* The "service" parameter, which is the port, doesn't take effective here.
+	 * It is returned from service query.
+	 */
+	err = rdma_getaddrinfo(CM_EXAMPLE_CLIENT_GID, NULL, &hints, &rai);
 	if (err) {
 		perror("rdma_getaddrinfo");
 		return err;
 	}
+	dump_sockaddr_ib("src_addr", (struct sockaddr_ib *)rai->ai_src_addr);
 
 	err = rdma_bind_addr(cm_id, rai->ai_src_addr);
         if (err) {
@@ -132,8 +121,8 @@ static int start_cm_client(void)
 	rai = NULL;
 
 	hints.ai_flags = RAI_SA;
-	err = rdma_resolve_addrinfo(cm_id, NULL,
-				    CM_EXAMPLE_IB_SERVICE_ID, &hints);
+	err = rdma_resolve_addrinfo(cm_id, NULL, CM_EXAMPLE_IB_SERVICE_ID, &hints);
+	//err = rdma_resolve_addrinfo(cm_id, NULL, CM_EXAMPLE_IB_SERVICE_NAME, &hints);
 	if (err) {
 		perror("rdma_resolve_addrinfo");
 		return err;
