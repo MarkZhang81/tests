@@ -1,0 +1,14 @@
+Various rdmacm examples. Note that parameters are hard-coded in params.h,
+please update it to fit your enviroment, then build it.
+
+build:
+$ make
+
+Examples:
+1. Normal IP-based cm:
+    Server: $ ./server
+    client: $ ./client
+
+2. resolve_ib_service:
+    Server: $ ./server -P ib
+    client: $ ./client_resolve_ib_service
