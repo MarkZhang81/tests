@@ -10,6 +10,8 @@
 #include "helper.h"
 #include "params.h"
 
+#define SERVER_VERSION "0.1"
+
 static struct rdma_event_channel *ech;
 
 static struct rdma_cm_id *listen_id, *client_id;
@@ -67,14 +69,18 @@ static int setup_qp_server(struct rdma_cm_id *cid)
 
 static int server_init(void)
 {
-	struct rdma_addrinfo hints = {}, *rai = NULL;
+	//struct rdma_addrinfo hints = {}, *rai = NULL;
+	uint64_t service_id = atol(CM_EXAMPLE_IB_SERVICE_ID);
 	struct rdma_conn_param param = {};
 	struct sockaddr_in sin = {};
-	struct rdma_cm_event *e;
+	struct sockaddr_ib sib = {};
 	struct sockaddr *sa;
+	struct rdma_cm_event *e;
 	int err;
 
+
 	if (server_port_space == RDMA_PS_IB) {
+#if 0
 		hints.ai_flags = RAI_NUMERICHOST | RAI_FAMILY | RAI_PASSIVE;
 		hints.ai_family = AF_IB;
 		hints.ai_port_space = RDMA_PS_IB;
@@ -83,10 +89,17 @@ static int server_init(void)
 			perror("rdma_getaddrinfo");
 			return err;
 		}
-		sa = rai->ai_src_addr;
+		saddr = *rai->ai_src_addr;
+		sa = &saddr;
 		dump_sockaddr_ib("src_addr", (struct sockaddr_ib *)rai->ai_src_addr);
-
-	//r = rdma_getaddrinfo(NULL, "7471", &hints, &rai);
+#endif
+		sib.sib_family = AF_IB;
+		sib.sib_pkey = 0xffff;
+		sib.sib_sid = htobe64(service_id);
+		sib.sib_sid_mask = (__be64)-1;
+		dump_sockaddr_ib("src_addr", (struct sockaddr_ib *)&sib);
+		sa = (struct sockaddr *)&sib;
+		//r = rdma_getaddrinfo(NULL, "7471", &hints, &rai);
 	} else if (server_port_space == RDMA_PS_TCP) {
 		sin.sin_family = AF_INET;
 		sin.sin_port = htons(CM_EXAMPLE_SERVER_PORT);
@@ -114,10 +127,10 @@ static int server_init(void)
 		perror("rdma_bind_addr");
 		return err;
 	}
-	INFO("bound done, port space 0x%x port %s (in resolve ib service tests this port must be low 16-bit of the registered serviceID)",
-	     server_port_space, CM_EXAMPLE_SERVER_PORT_STR);
-	if (rai)
-		rdma_freeaddrinfo(rai);
+	INFO("bound done, port space 0x%x port %d",
+	     SERVER_ID_to_PORT_SPACE(service_id), SERVER_ID_to_PORT(service_id));
+
+	//if (rai) rdma_freeaddrinfo(rai);
 
 	err = rdma_listen(listen_id, 10);
         if (err) {
@@ -295,6 +308,7 @@ int main(int argc, char *argv[])
 {
 	int ret;
 
+	INFO("server version %s", SERVER_VERSION);
 	ret = parse_opt(argc, argv);
 	if (ret)
 		return ret;
@@ -305,7 +319,7 @@ int main(int argc, char *argv[])
 
 	recv_data(client_id);
 
-	sleep(2);
+	sleep(1);
 	server_uninit();
 	return 0;
 }

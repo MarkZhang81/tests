@@ -11,6 +11,8 @@
 #include "helper.h"
 #include "params.h"
 
+#define CLIENT_RESOLVE_IB_SERVICE_VERSION "0.1"
+
 static struct rdma_event_channel *ech;
 static struct rdma_cm_id *cm_id;
 
@@ -67,7 +69,9 @@ static int start_cm_client(void)
 {
 	struct rdma_addrinfo hints = {}, *rai = NULL;
 	struct rdma_conn_param param = {};
+	struct sockaddr_ib sib = {};
         struct rdma_cm_event *e;
+	struct in6_addr a6;
 	int err, n = 0;
 
 	INFO("Start client with IB resolve_addrinfo..");
@@ -84,18 +88,6 @@ static int start_cm_client(void)
 	}
 
 #if 0
-	struct sockaddr_in sin = {};
-
-	/* bind_addr() before resolve_addrinfo() */
-	sin.sin_family = AF_INET;
-	sin.sin_port   = htons(CM_EXAMPLE_SERVER_PORT);
-	err = inet_pton(AF_INET, CM_EXAMPLE_LOCAL_IP, &sin.sin_addr);
-	if (err != 1) {
-		perror("inet_pton");
-		return err;
-	}
-	err = rdma_bind_addr(cm_id, (struct sockaddr *)&sin);
-#endif
 	hints.ai_flags = RAI_NUMERICHOST | RAI_FAMILY | RAI_PASSIVE;
 	hints.ai_family = AF_IB;
 	hints.ai_port_space = RDMA_PS_IB;
@@ -110,15 +102,30 @@ static int start_cm_client(void)
 		return err;
 	}
 	dump_sockaddr_ib("src_addr", (struct sockaddr_ib *)rai->ai_src_addr);
+	//err = rdma_bind_addr(cm_id, rai->ai_src_addr);
+#endif
+	/* Here we can use rdma_getaddrinfo to make it easier; See above code */
+	err = inet_pton(AF_INET6, CM_EXAMPLE_CLIENT_GID, &a6);
+	if (err != 1) {
+		ERR("inet_pton failed, err %d", err);
+		return err;
+	}
 
-	err = rdma_bind_addr(cm_id, rai->ai_src_addr);
+
+	sib.sib_family = AF_IB;
+	sib.sib_pkey = 0xffff;	/* FIXME: Why need to set pkey here??? */
+	//sib.sib_sid = htobe64(RDMA_PS_IB << 16);
+	//sib.sib_sid_mask = htobe64(0xffffffffffff0000);
+	ib_addr_set(&sib.sib_addr, a6.s6_addr32[0], a6.s6_addr32[1], a6.s6_addr32[2], a6.s6_addr32[3]);
+	dump_sockaddr_ib("src_addr", &sib);
+	err = rdma_bind_addr(cm_id, (struct sockaddr *)&sib);
         if (err) {
 		perror("rdma_bind_addr");
 		return err;
 	}
 	INFO("bind_addr(%s) done", CM_EXAMPLE_CLIENT_GID);
-	rdma_freeaddrinfo(rai);
-	rai = NULL;
+	//rdma_freeaddrinfo(rai);
+	//rai = NULL;
 
 	hints.ai_flags = RAI_SA;
 	err = rdma_resolve_addrinfo(cm_id, NULL, CM_EXAMPLE_IB_SERVICE_ID, &hints);
@@ -252,6 +259,9 @@ static void send_data(void)
 int main(int argc, char *argv[])
 {
 	int ret;
+
+	INFO("version %s", CLIENT_RESOLVE_IB_SERVICE_VERSION);
+
 	ret = start_cm_client();
 	if (ret)
 		return ret;
