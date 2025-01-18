@@ -113,7 +113,7 @@ static int start_cm_client(void)
 
 
 	sib.sib_family = AF_IB;
-	sib.sib_pkey = 0xffff;	/* Must be same as server */
+	//sib.sib_pkey = 0xffff;
 	//sib.sib_sid = htobe64(RDMA_PS_IB << 16);
 	//sib.sib_sid_mask = htobe64(0xffffffffffff0000);
 	ib_addr_set(&sib.sib_addr, a6.s6_addr32[0], a6.s6_addr32[1], a6.s6_addr32[2], a6.s6_addr32[3]);
