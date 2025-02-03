@@ -160,6 +160,8 @@ static int start_cm_client(void)
 		n++;
 	} while (rai);
 
+	rdma_freeaddrinfo(rai);
+
 	err = rdma_resolve_route(cm_id, 5000);
 	if (err) {
 		perror("rdma_resolve_route");

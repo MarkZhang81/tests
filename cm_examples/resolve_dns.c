@@ -73,6 +73,8 @@ void do_resolve_dns_test(void)
 		n++;
 	} while (rai);
 
+	rdma_freeaddrinfo(rai);
+
 out_event:
 	rdma_destroy_id(cm_id);
 out_create_id:

@@ -26,4 +26,4 @@ write_event: write_event.o
 	$(CC) $(CFLAGS) -c $<
 
 clean:
-	rm -f *.o client
+	rm -f *.o client server client_resolve_ib_service resolve_dns write_event 2>/dev/null
