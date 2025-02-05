@@ -12,3 +12,12 @@ Examples:
 2. resolve_ib_service:
     Server: $ ./server -P ib
     client: $ ./client_resolve_ib_service
+
+3. resolve dns with rdma_resolve_addrinfo():
+    $ ./resolve_dns
+
+4. Inject a cm event with rdma_write_cm_event():
+    $ ./write_event
+
+5. Resolve ib service with rdma_getaddrinfo():
+    $ ./getaddrinfo_ai
