@@ -21,3 +21,7 @@ Examples:
 
 5. Resolve ib service with rdma_getaddrinfo():
     $ ./getaddrinfo_ai
+
+   and
+    Server: $ ./server -P ib
+    Client: $ ./getaddrinfo_ai_2
