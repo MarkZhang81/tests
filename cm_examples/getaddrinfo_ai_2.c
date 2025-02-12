@@ -101,6 +101,11 @@ static int start_cm_client(void)
 		n++;
 	} while (rai);
 
+	/* The first resolved AI is bound by default, there's no need to call
+	 * rdma_resolve_addr() with it. In our test env there's only one AI
+	 * returned, so here's just a demo about how to call resolve_addr()
+	 * for a resolved AI, which should not be the first one.
+	 */
 	err = rdma_resolve_addr(cm_id, NULL, head->ai_dst_addr, 2000);
 	if (err) {
 		perror("rdma_resolve_addr");
