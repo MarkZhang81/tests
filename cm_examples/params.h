@@ -12,7 +12,8 @@
 #define CM_EXAMPLE_SERVER_PORT_STR "7471"
 
 /* Registered to SM */
-#define CM_EXAMPLE_IB_SERVICE_ID "20913455"	/* 0x13f1d2f */
+//#define CM_EXAMPLE_IB_SERVICE_ID "20913455"	/* 0x13f1d2f */
+#define CM_EXAMPLE_IB_SERVICE_ID "0x13f1d2f"
 #define CM_EXAMPLE_IB_SERVICE_NAME "MyService"
 
 /* port_space and port is defined in service_id:

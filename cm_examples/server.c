@@ -70,14 +70,16 @@ static int setup_qp_server(struct rdma_cm_id *cid)
 static int server_init(void)
 {
 	//struct rdma_addrinfo hints = {}, *rai = NULL;
-	uint64_t service_id = atol(CM_EXAMPLE_IB_SERVICE_ID);
 	struct rdma_conn_param param = {};
 	struct sockaddr_in sin = {};
 	struct sockaddr_ib sib = {};
 	struct sockaddr *sa;
 	struct rdma_cm_event *e;
+	char *endptr = NULL;
+	uint64_t service_id;
 	int err;
 
+	service_id = strtol(CM_EXAMPLE_IB_SERVICE_ID, &endptr, 0);
 
 	if (server_port_space == RDMA_PS_IB) {
 #if 0
