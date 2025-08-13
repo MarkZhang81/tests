@@ -5,7 +5,7 @@ CFLAGS := -Wall -g
 LIBS := -lrdmacm -libverbs -lmlx5 -lpthread
 HEADERS := params.h helper.h
 
-all: client server client_resolve_ib_service resolve_dns write_event getaddrinfo_ai getaddrinfo_ai_2
+all: client server client_resolve_ib_service resolve_dns write_event getaddrinfo_ai getaddrinfo_ai_2 client.sync
 
 client: client.o
 	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
@@ -28,8 +28,11 @@ getaddrinfo_ai: getaddrinfo_ai.o
 getaddrinfo_ai_2: getaddrinfo_ai_2.o
 	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
 
+client.sync: client.sync.o
+	$(LD) $(LD_FLAGS) -o $@ $^ $(LIBS)
+
 %.o: %.c $(HEADERS) Makefile
 	$(CC) $(CFLAGS) -c $<
 
 clean:
-	rm -f *.o client server client_resolve_ib_service resolve_dns write_event getaddrinfo_ai 2>/dev/null
+	rm -f *.o client server client_resolve_ib_service resolve_dns write_event getaddrinfo_ai client.sync 2>/dev/null
